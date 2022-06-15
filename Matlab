@@ -1,0 +1,151 @@
+clear
+close all
+
+% Importieren von Daten und Konvertieren von Dichteverteilungen %
+a = load('density.csv');
+b=a;
+sig0 = 0.02;            
+N = 192;
+rho_max = 2004;
+Radius = 0.012;
+dx=0.005;
+dy=0.005;
+x = 0:dx:0.8;
+y = 0:dy:1.1;
+Nx = length(x);
+Ny = length(y);
+numcyc=100;
+rho= zeros(Nx,Ny,numcyc);
+[X, Y] = meshgrid(y,x);
+
+% Löschen die von Abweiser abgedeckten Punkte und die Punkte nach Abweiser %
+for i=1:84
+    for j=1:(104-i)
+        b(i,i+j+117)=0;
+    end
+end
+
+%Löschen Begrenzungspunkte, die die Bedingung nicht erfuellen %
+b(1,:)=0; b(2,:)=0; b(3,:)=0; b(159,:)=0; b(160,:)=0; b(161,:)=0;
+b(:,1)=0; b(:,2)=0; b(:,3)=0; b(:,219)=0; b(:,220)=0; b(:,221)=0;
+
+% % Die Auswahl der Toleranz %
+meannum=zeros(1,numcyc);
+for o=1:numcyc
+    sum=0;
+    for cyc=1:numcyc
+        temp=b;
+        for s=1:Nx
+            for t=1:Ny
+                if temp(s,t)<(0.27+0.0001*o)
+                    temp(s,t)=0;
+                else
+                    c = randsrc(1,1,[temp(s,t) 0; temp(s,t) 1-temp(s,t)]);
+                    temp(s,t)=c;
+                    while c~=0
+                        for infor1=1:5
+                            temp(s+4,t-3+infor1)=0;
+                            temp(s-4,t-3+infor1)=0;
+                        end
+                        for infor2=1:7
+                            temp(s+3,t-4+infor2)=0;
+                            temp(s-3,t-4+infor2)=0;
+                        end
+                        for infor3=1:9
+                            temp(s+2,t-5+infor3)=0;
+                            temp(s-2,t-5+infor3)=0;
+                        end
+                        for infor4=1:9
+                            temp(s+1,t-5+infor4)=0;
+                            temp(s-1,t-5+infor4)=0;
+                        end
+                        temp(s,t-4)=0; temp(s,t-3)=0; temp(s,t-2)=0; temp(s,t-1)=0;
+                        temp(s,t+4)=0; temp(s,t+3)=0; temp(s,t+2)=0; temp(s,t+1)=0;
+                        c=0;
+                    end
+                end
+            end
+        end
+        sum=sum+length(find(temp~=0));
+    end
+    meannum(1,o)=sum/numcyc;
+end
+optinum=find((meannum-192)==min(abs(meannum-192)));
+
+% Löschung von Gitterpunkten entsprechend der Dichtetoleranz und erzeugen die Anfangslösung %
+cellmatrix=zeros(Nx,Ny,numcyc);
+for k=1:numcyc
+    temp = b;
+    while length(find(temp~=0))~=N  
+        temp = b;
+        for s=1:Nx
+            for t=1:Ny
+                if temp(s,t)<(0.27+0.0001*optinum)
+                    temp(s,t)=0;
+                else
+                    c = randsrc(1,1,[temp(s,t) 0; temp(s,t) 1-temp(s,t)]);
+                    temp(s,t)=c;
+                    while c~=0
+                        for infor1=1:5
+                        temp(s+4,t-3+infor1)=0;
+                        temp(s-4,t-3+infor1)=0;
+                        end
+                        for infor2=1:7
+                        temp(s+3,t-4+infor2)=0;
+                        temp(s-3,t-4+infor2)=0;
+                        end
+                        for infor3=1:9
+                        temp(s+2,t-5+infor3)=0;
+                        temp(s-2,t-5+infor3)=0;
+                        end
+                        for infor4=1:9
+                        temp(s+1,t-5+infor4)=0;
+                        temp(s-1,t-5+infor4)=0;
+                        end
+                        temp(s,t-4)=0; temp(s,t-3)=0; temp(s,t-2)=0; temp(s,t-1)=0;
+                        temp(s,t+4)=0; temp(s,t+3)=0; temp(s,t+2)=0; temp(s,t+1)=0;
+                        c=0;
+                    end
+                end
+            end
+        end    
+    end
+    cellmatrix(:,:,k)=temp;
+end
+
+% Umrechnung der Stueckgutverteilung zurueck in die Dichteverteilung %
+for m=1:numcyc
+    [row,col] = find(cellmatrix(:,:,m)~=0);
+    for n=1:N
+            part_x = row(n)*dx;
+            part_y = col(n)*dy;
+            rho(:,:,m) = rho(:,:,m) + 1/(rho_max*2*pi*sig0^2)*exp(-1/(2*sig0^2)*((X-part_x).^2+(Y-part_y).^2))*2*sqrt(3)*Radius^2*rho_max;
+    end
+end
+
+% Nichtlineare kleinste Quadrate %
+NkQ=zeros(1,100);
+for r=1:numcyc
+    summe=0;
+    for p=1:Nx
+        for q=1:Ny
+            summe=summe+(b(p,q)-rho(p,q,r))^2;
+        end
+    end
+    NkQ(1,r)=summe;
+end
+minpos=find(NkQ(:,:)==min(NkQ));
+
+% Darstellung der optimalen Lösung auf einem Bild %
+for u=1:Nx
+    for v=1:Ny
+        if cellmatrix(u,v,minpos)~=0
+            plot(dx*v,dy*u,'bo');
+            hold on;
+        end
+    end
+end
+set(gca,'XAxisLocation','top');
+set(gca,'YDir','reverse');
+axis([0 1.1 0 1]);
+grid on ;
